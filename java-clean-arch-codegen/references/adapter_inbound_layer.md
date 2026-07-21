@@ -1,33 +1,33 @@
-# Application 層 — 通訊與應用進入點
+# Adapter/Inbound 層 — 通訊與應用進入點(Interface Adapters,被外部驅動的一側)
 
 ## 規則
 
 1. Spring MVC 註解(`@RestController`, `@RequestMapping` 等)只出現在本層。
-2. Controller 方法固定三步:解析參數 → 呼叫 UseCase(Inbound Port)→ 包裝 Response DTO 回傳;方法內零業務判斷。
+2. Controller 方法固定三步:解析參數 → 呼叫 UseCase(Inbound Port)→ 包裝 Response 回傳;方法內零業務判斷。
 3. Controller 依賴 UseCase 介面(不是 Impl),建構子注入。
-4. Request DTO 使用 `jakarta.validation` 註解(`@NotBlank`, `@NotNull`, `@Min` 等),Controller 參數標 `@Valid @RequestBody`。
-5. Response DTO 包裝 Domain 物件的欄位;提供 static factory `from(<Entity>)`;Domain 物件本身一律不直接回傳。
+4. Command 使用 `jakarta.validation` 註解(`@NotBlank`, `@NotNull`, `@Min` 等),Controller 參數標 `@Valid @RequestBody`;不叫 `Request`/`Dto`,一律叫 `<Action>Command`。
+5. Response 包裝 Domain 物件的欄位;提供 static factory `from(<Entity>)`;Domain 物件本身一律不直接回傳;不叫 `Dto`,一律叫 `<Entity>Response`。
 6. 回傳型別一律 `ResponseEntity<T>`:建立回 `201`、查詢/更新回 `200`、刪除回 `204`。
 7. `GlobalExceptionHandler` 標 `@RestControllerAdvice`,固定處理四類:`<Entity>NotFoundException` → 404、`MethodArgumentNotValidException` → 400、`IllegalArgumentException` / `IllegalStateException` → 400、`Exception` → 500;錯誤回應格式固定為 `{"error": "<message>"}`。
 8. URL 命名:`/api/<entities>`(複數、kebab-case);路徑參數標 `@PathVariable("<name>")`。
 
 ## 產出檔案(依序)
 
-1. `dto/<Action>Request.java`(每個寫入型 endpoint 一個)
-2. `dto/<Entity>Response.java`
+1. `<Action>Command.java`(每個寫入型 endpoint 一個)
+2. `<Entity>Response.java`
 3. `<Entity>Controller.java`
 4. `exception/GlobalExceptionHandler.java`
 
 ## 模板
 
-### Request DTO `<Action>Request.java`
+### Command `<Action>Command.java`
 
 ```java
-package <basePackage>.application.<entity>.dto;
+package <basePackage>.adapter.inbound.web.<entity>;
 
 import jakarta.validation.constraints.NotNull;
 
-public class <Action>Request {
+public class <Action>Command {
 
     @NotNull(message = "<field> must not be null")
     private <Type> <field>;
@@ -37,10 +37,10 @@ public class <Action>Request {
 }
 ```
 
-### Response DTO `<Entity>Response.java`
+### Response `<Entity>Response.java`
 
 ```java
-package <basePackage>.application.<entity>.dto;
+package <basePackage>.adapter.inbound.web.<entity>;
 
 import <basePackage>.domain.<entity>.<Entity>;
 
@@ -73,10 +73,8 @@ public class <Entity>Response {
 ### 控制器 `<Entity>Controller.java`
 
 ```java
-package <basePackage>.application.<entity>;
+package <basePackage>.adapter.inbound.web.<entity>;
 
-import <basePackage>.application.<entity>.dto.<Action>Request;
-import <basePackage>.application.<entity>.dto.<Entity>Response;
 import <basePackage>.domain.<entity>.<Entity>;
 import <basePackage>.usecase.<entity>.<Entity>UseCase;
 import jakarta.validation.Valid;
@@ -96,8 +94,8 @@ public class <Entity>Controller {
 
     // POST 建立 → 201
     @PostMapping
-    public ResponseEntity<<Entity>Response> create(@Valid @RequestBody <Action>Request request) {
-        <Entity> <entity> = <entity>UseCase.create(request.get<Field>());
+    public ResponseEntity<<Entity>Response> create(@Valid @RequestBody <Action>Command command) {
+        <Entity> <entity> = <entity>UseCase.create(command.get<Field>());
         return ResponseEntity.status(HttpStatus.CREATED).body(<Entity>Response.from(<entity>));
     }
 
@@ -113,7 +111,7 @@ public class <Entity>Controller {
 ### 全域例外處理器 `GlobalExceptionHandler.java`
 
 ```java
-package <basePackage>.application.exception;
+package <basePackage>.adapter.inbound.web.exception;
 
 import <basePackage>.usecase.<entity>.<Entity>NotFoundException;
 import org.springframework.http.HttpStatus;

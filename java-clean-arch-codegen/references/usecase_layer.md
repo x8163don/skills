@@ -3,7 +3,7 @@
 ## 規則
 
 1. 只 import Domain 類別與本層(usecase)類別;`@Transactional` 是本層唯一允許的 Spring import。
-2. 先定義 Outbound Ports(Repository、外部服務、事件發送)為介面,再定義 Inbound Port(`<Entity>UseCase`),最後實作 `<Entity>UseCaseImpl`。
+2. 先定義 Outbound Ports(Repository、Client/Messaging/Cache/Notification/Storage 等外部依賴、事件發送)為介面,再定義 Inbound Port(`<Entity>UseCase`),最後實作 `<Entity>UseCaseImpl`。
 3. 所有依賴透過建構子注入;實作類別為無狀態單例。
 4. 每個寫入方法(呼叫 `save()` 或變更狀態)標 `@Transactional`(`org.springframework.transaction.annotation.Transactional`)。
 5. 查詢單筆一律 `repository.getById(id).orElseThrow(() -> new <Entity>NotFoundException(...))`。
@@ -14,7 +14,7 @@
 ## 產出檔案(依序)
 
 1. `<Entity>Repository.java`(Outbound Port)
-2. `<Concept>Service.java`(Outbound Port,如有外部依賴)
+2. `<Concept>Client.java` / `<Concept>MessagePublisher.java` / `<Concept>CacheStore.java` / `<Concept>NotificationSender.java` / `<Concept>FileStorage.java`(Outbound Port,依外部依賴性質擇一,如有)
 3. `DomainEventPublisher.java`(Outbound Port,如有事件)
 4. `event/<Entity><Action>Event.java`(如有事件)
 5. `<Entity>NotFoundException.java`
@@ -37,17 +37,21 @@ public interface <Entity>Repository {
 }
 ```
 
-### Outbound Port — 外部服務
+### Outbound Port — 外部依賴(Client / Messaging / Cache / Notification / Storage)
+
+依外部依賴的性質選擇介面命名(見 `references/adapter_outbound_layer.md` 的分類表),方法簽名皆相同模式,以 Client(呼叫外部 API/SDK)為例:
 
 ```java
 package <basePackage>.usecase.<entity>;
 
 import <basePackage>.domain.<entity>.<Entity>;
 
-public interface <Concept>Service {
-    <ReturnType> <serviceMethod>(<Entity> <entity>);
+public interface <Concept>Client {
+    <ReturnType> <clientMethod>(<Entity> <entity>);
 }
 ```
+
+其餘分類介面命名同樣模式:`<Concept>MessagePublisher`(訊息佇列)、`<Concept>CacheStore`(快取)、`<Concept>NotificationSender`(通知)、`<Concept>FileStorage`(檔案儲存)。
 
 ### Outbound Port — 事件發送
 
