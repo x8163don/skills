@@ -119,7 +119,7 @@ package <basePackage>.adapter.outbound.repository;
 import <basePackage>.adapter.outbound.repository.datamodel.<Entity>DataModel;
 import <basePackage>.adapter.outbound.repository.mapper.<Entity>Mapper;
 import <basePackage>.domain.<entity>.<Entity>;
-import <basePackage>.usecase.<entity>.<Entity>Repository;
+import <basePackage>.usecase.<entity>.port.<Entity>Repository;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
@@ -154,7 +154,7 @@ public class <Entity>RepositoryImpl implements <Entity>Repository {
 package <basePackage>.adapter.outbound.client;
 
 import <basePackage>.domain.<entity>.<Entity>;
-import <basePackage>.usecase.<entity>.<Concept>Client;
+import <basePackage>.usecase.<entity>.port.<Concept>Client;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -196,7 +196,7 @@ public class <Concept>ClientException extends RuntimeException {
 ```java
 package <basePackage>.adapter.outbound.event;
 
-import <basePackage>.usecase.<entity>.DomainEventPublisher;
+import <basePackage>.usecase.<entity>.port.DomainEventPublisher;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 

@@ -8,13 +8,16 @@
 2. Adapter/Outbound 透過「實作 Usecase 的 Outbound Port」與內層連接;Adapter/Inbound 透過「呼叫 Inbound Port」與內層連接。
 3. 所有 package 路徑與類別名稱依本文件的結構與推導表產生。
 4. Base package 為 `<basePackage>`(用戶未提供時使用 `com.example.<project>`)。
+5. Domain 物件(及其業務方法)只在 `domain`、`usecase`、`adapter/outbound`(Repository Port 本來就是 `<Entity> save(<Entity>)` 這種簽名,Mapper 也要做 Domain ↔ DataModel 轉換,合理接觸 Domain)之間流動;但**跨到 `adapter/inbound` 一律不行**——Inbound Port 回傳的必須是 Usecase 自己定義的 `<Entity>Result` 家族型別(見 `references/usecase_layer.md` 規則 9),Controller/Response 不 import `domain` package。
+6. **一個 use case 情境一個 Inbound Port + 一個 Impl**,不用一個大介面/大 Impl 涵蓋整個 entity 的所有動作(見 `references/usecase_layer.md` 規則 2、10)。
+7. **`<Action>Command` 跟 `<Entity>Result` 一樣定義在 `usecase` 層**(見 `references/usecase_layer.md` 規則 11),不是 Adapter/Inbound 自己的型別——Command 是輸入邊界、Result 是輸出邊界,兩者對稱,都由 Usecase 擁有;Adapter/Inbound 的 Controller 只是 import 使用。
 
 ```mermaid
 graph TD
-    A[adapter/inbound/web - Controller / Command / Response] -->|呼叫 Inbound Port| D[usecase]
-    B[adapter/outbound/repository - JPA 實作] -.->|實作 Outbound Port| D
+    A[adapter/inbound/web - Controller / Response] -->|傳入 Command,呼叫 Inbound Port,收到 Result| D[usecase]
+    B[adapter/outbound/repository - JPA 實作] -.->|實作 Outbound Port,交換 Domain| D
     C[adapter/outbound/client 等 - 第三方 SDK/佇列/快取] -.->|實作 Outbound Port| D
-    D -->|編排| E[domain]
+    D -->|編排,操作 Domain| E[domain]
 ```
 
 ## 與 Clean Architecture 四圈的對應
@@ -26,7 +29,7 @@ graph TD
 | `adapter`(outbound + inbound) | 第三圈 Interface Adapters(Gateway/Repository 是 outbound 側,Controller/Presenter 是 inbound 側) |
 | *(無獨立 package)* | 第四圈 Frameworks & Drivers — Spring Boot、JPA/DB driver、HTTP server 本身;實務上內嵌於 adapter 層的框架註解與函式庫呼叫中,不另立目錄 |
 
-`adapter` 不再用 `application` 這個名字,避免與第四圈的 "Frameworks" 混淆——Controller/Command/Response 屬於 Interface Adapters 的 inbound 側,不是框架本身。
+`adapter` 不再用 `application` 這個名字,避免與第四圈的 "Frameworks" 混淆——Controller/Response 屬於 Interface Adapters 的 inbound 側,不是框架本身(`Command` 定義在 usecase 層,見規則 7)。
 
 ## Package 結構
 
@@ -40,16 +43,25 @@ graph TD
 │
 ├── usecase/
 │   └── <entity>/
-│       ├── <Entity>UseCase.java           # Inbound Port(介面)
-│       ├── <Entity>UseCaseImpl.java       # UseCase 實作
-│       ├── <Entity>Repository.java        # Outbound Port — 資料庫抽象
-│       ├── <Concept>Client.java           # Outbound Port — 外部 API/SDK 抽象(如適用)
-│       ├── <Concept>MessagePublisher.java # Outbound Port — 訊息佇列抽象(如適用)
-│       ├── <Concept>CacheStore.java       # Outbound Port — 快取抽象(如適用)
-│       ├── <Concept>NotificationSender.java # Outbound Port — 通知抽象(如適用)
-│       ├── <Concept>FileStorage.java      # Outbound Port — 檔案儲存抽象(如適用)
-│       ├── DomainEventPublisher.java      # Outbound Port — 事件發送抽象
-│       ├── <Entity>NotFoundException.java # 領域例外
+│       ├── <Action><Entity>UseCaseImpl.java   # 一個 use case 情境一個檔案(如 CreateBookingUseCaseImpl)
+│       ├── Get<Entity>UseCaseImpl.java        # 查詢型 use case,同樣直接放在此目錄下
+│       ├── port/                          # 所有介面(Inbound + Outbound Port)
+│       │   ├── <Action><Entity>UseCase.java   # Inbound Port,一個 use case 情境一個(回傳 Result,不回傳 Domain)
+│       │   ├── Get<Entity>UseCase.java        # 查詢型 Inbound Port
+│       │   ├── <Entity>Repository.java    # Outbound Port — 資料庫抽象
+│       │   ├── <Concept>Client.java       # Outbound Port — 外部 API/SDK 抽象(如適用)
+│       │   ├── <Concept>MessagePublisher.java # Outbound Port — 訊息佇列抽象(如適用)
+│       │   ├── <Concept>CacheStore.java   # Outbound Port — 快取抽象(如適用)
+│       │   ├── <Concept>NotificationSender.java # Outbound Port — 通知抽象(如適用)
+│       │   ├── <Concept>FileStorage.java  # Outbound Port — 檔案儲存抽象(如適用)
+│       │   └── DomainEventPublisher.java  # Outbound Port — 事件發送抽象
+│       ├── result/                        # Usecase 輸出型別(record,無業務方法)
+│       │   ├── <Entity>Result.java
+│       │   └── <Entity>SummaryResult.java # 列表/精簡查詢用(如適用)
+│       ├── command/                       # Usecase 輸入型別(record,與 result/ 對稱)
+│       │   └── <Action>Command.java       # 每個需要 request body 的 use case 一個
+│       ├── exception/
+│       │   └── <Entity>NotFoundException.java # 領域例外
 │       └── event/
 │           └── <Entity><Action>Event.java # 領域事件
 │
@@ -70,8 +82,7 @@ graph TD
     └── inbound/                               # 呼叫 Inbound Port,被外部驅動的一側
         └── web/
             ├── <entity>/
-            │   ├── <Entity>Controller.java    # @RestController
-            │   ├── <Action>Command.java       # 寫入型 endpoint 的輸入(不叫 Request/Dto)
+            │   ├── <Entity>Controller.java    # @RestController,import usecase 層的 <Action>Command
             │   └── <Entity>Response.java      # 輸出(不叫 Dto)
             └── exception/GlobalExceptionHandler.java  # @RestControllerAdvice
 ```
@@ -83,8 +94,11 @@ graph TD
 | Domain 實體 | `<Entity>.java` | `Booking.java` |
 | Domain 列舉 | `<Entity>Status.java` | `BookingStatus.java` |
 | Domain 策略介面 | `<Concept>.java` | `Plan.java` |
-| UseCase Inbound Port | `<Entity>UseCase.java` | `BookingUseCase.java` |
-| UseCase 實作 | `<Entity>UseCaseImpl.java` | `BookingUseCaseImpl.java` |
+| UseCase Inbound Port(一個 use case 一個) | `<Action><Entity>UseCase.java` | `CreateBookingUseCase.java`、`ConfirmBookingUseCase.java`、`GetBookingUseCase.java` |
+| UseCase 實作(一個 use case 一個) | `<Action><Entity>UseCaseImpl.java` | `CreateBookingUseCaseImpl.java`、`ConfirmBookingUseCaseImpl.java`、`GetBookingUseCaseImpl.java` |
+| UseCase 輸出型別(detail) | `<Entity>Result.java` | `BookingResult.java` |
+| UseCase 輸出型別(summary/list) | `<Entity>SummaryResult.java` | `BookingSummaryResult.java` |
+| UseCase 輸入型別(command,usecase 層) | `<Action>Command.java` | `CreateBookingCommand.java` |
 | Outbound Port — DB | `<Entity>Repository.java` | `BookingRepository.java` |
 | Outbound Port — 外部 API/SDK | `<Concept>Client.java` | `PaymentClient.java` |
 | Outbound Port — 訊息佇列 | `<Concept>MessagePublisher.java` | `OrderMessagePublisher.java` |
@@ -99,10 +113,9 @@ graph TD
 | Repository 實作 | `<Entity>RepositoryImpl.java` | `BookingRepositoryImpl.java` |
 | 外部依賴 Adapter(client/messaging/cache/notification/storage 共用) | `<Provider><Concept>Adapter.java` | `StripePaymentAdapter.java` |
 | REST Controller | `<Entity>Controller.java` | `BookingController.java` |
-| Command | `<Action>Command.java` | `ConfirmBookingCommand.java` |
 | Response | `<Entity>Response.java` | `BookingResponse.java` |
 | Domain 單元測試 | `<Entity>Test.java` | `BookingTest.java` |
-| UseCase 單元測試 | `<Entity>UseCaseImplTest.java` | `BookingUseCaseImplTest.java` |
+| UseCase 單元測試(一個 use case 一個) | `<Action><Entity>UseCaseImplTest.java` | `ConfirmBookingUseCaseImplTest.java` |
 
 ## 輸入格式
 
