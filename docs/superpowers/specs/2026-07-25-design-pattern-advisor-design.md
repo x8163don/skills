@@ -100,6 +100,14 @@ whether Forces are genuinely in conflict and whether the Resulting Context cost 
 it, per the user's request to make "套用原因跟結果" (the reason and the result) visible
 directly.
 
+**Pseudocode examples must not reuse the course's example scenario.** The course frames
+every pattern around one running example (a two-player hero battle game — attack types,
+HP, etc.). That scenario is specific to a game domain and doesn't generalize well to the
+kinds of situations `ddd-domain-modeling` users are actually modeling (business/domain
+software). The `Solution` section's pseudocode should use an original, more broadly
+applicable example invented per pattern — course material is a source for the *reasoning*
+(signals, forces, trade-offs), not for the concrete example.
+
 `signal-table.md` stays a flat quick-reference table:
 
 ```markdown
@@ -113,7 +121,7 @@ directly.
 
 | Group | Patterns | Source |
 |---|---|---|
-| Course-backed (10) | Strategy, Template Method, Chain of Responsibility, Observer, Command, State, Proxy, Facade, Adapter, Composite | Extract signals/forces/trade-offs from `31 DesignPattern課程影片-字幕/*.txt`, cross-check against standard GoF knowledge to fill gaps the course doesn't cover |
+| Course-backed (10) | Strategy, Template Method, Chain of Responsibility, Observer, Command, State, Proxy, Facade, Adapter, Composite | Extract signals/forces/trade-offs (reasoning only, not the example scenario) from `31 DesignPattern課程影片-字幕/*.txt`, cross-check against standard GoF knowledge to fill gaps the course doesn't cover |
 | GoF-only (3) | Builder, Factory, Decorator | No course material; write from general GoF knowledge, reusing content already implicit in the current `4-ood-patterns.md` table |
 
 ### Changes to `ddd-domain-modeling`
@@ -141,8 +149,9 @@ No automated tests (this is a markdown knowledge skill). Manual dry runs instead
 
 1. **Standalone trigger**: ask "這個情境要不要套 Strategy pattern" and confirm
    `design-pattern-advisor` triggers and loads `patterns/strategy.md`.
-2. **Integrated trigger**: walk through `ddd-domain-modeling` stage 4 using the course's
-   "英雄攻擊方式" scenario (from the Strategy subtitle transcript) and confirm it calls
+2. **Integrated trigger**: walk through `ddd-domain-modeling` stage 4 using an original
+   scenario invented for this test (not the course's game example — e.g. an order-discount
+   calculation that branches by membership tier) and confirm it calls
    `design-pattern-advisor` mid-flow instead of reasoning from a local table.
 3. **Content spot-check**: manually verify Context/Forces/Resulting Context accuracy for at
    least 2-3 pattern files — one course-sourced (e.g. Chain of Responsibility), one
