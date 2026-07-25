@@ -14,4 +14,4 @@
 | 需要讓 client 用一致的方式操作一組樹狀結構(遞迴的容器/葉節點),且不在乎自己面對的是單一物件還是整棵子樹 | Composite | 結構型 | [patterns/composite.md](patterns/composite.md) |
 | 需要在不修改既有類別的前提下疊加新行為,且疊加的方式要能自由組合 | Decorator | 結構型 | [patterns/decorator.md](patterns/decorator.md) |
 | 一個物件的建構需要多個可選步驟、順序敏感 | Builder | 創建型 | [patterns/builder.md](patterns/builder.md) |
-| 建立一個複雜物件族的邏輯,應該跟使用它的地方分開 | Factory | 創建型 | [patterns/factory.md](patterns/factory.md) |
+| 建立一個複雜物件族的邏輯,應該跟使用它的地方分開 | Factory(Simple Factory) | 創建型 | [patterns/factory.md](patterns/factory.md) |
