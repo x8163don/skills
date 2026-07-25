@@ -15,7 +15,7 @@ description: Guides the user step-by-step through domain modeling before writing
 
 - 使用者要設計新功能/新系統,需要釐清領域模型、Aggregate 怎麼切、Entity 跟 Value Object 怎麼分
 - 在 OpenSpec 工作流中,`design.md` 需要先有領域模型才能填 Context / Decisions
-- 使用者直接要求 event storming、class diagram、或問「這裡要不要套 design pattern」
+- 使用者直接要求 event storming、class diagram
 
 **不是每次都要走完整四階段**:如果專案已經有涵蓋這次範圍的既有設計文件,或這次變更明顯很小(例如只是在既有 Aggregate 上加一個屬性),不需要硬逼使用者從 Event Storming 重新訪談一遍。怎麼判斷、怎麼跟使用者確認要不要簡化,見下面「開場」的第一步與 `references/0-scope-triage.md`。
 
