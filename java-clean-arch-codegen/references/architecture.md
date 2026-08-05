@@ -68,7 +68,7 @@ graph TD
 └── adapter/                                   # Interface Adapters(第三圈)
     ├── outbound/                              # 實作 Outbound Port,驅動內層依賴的一側
     │   ├── repository/
-    │   │   ├── datamodel/<Entity>DataModel.java  # JPA 持久化物件(@Entity @Table @Column),避免與 Domain 的 <Entity> 混淆
+    │   │   ├── datamodel/<Entity>DataModel.java  # JPA 持久化物件
     │   │   ├── mapper/<Entity>Mapper.java     # 雙向對映器(static methods)
     │   │   ├── <Entity>JpaRepository.java     # Spring Data JPA 介面
     │   │   └── <Entity>RepositoryImpl.java    # Outbound Port 實作
@@ -83,7 +83,7 @@ graph TD
         └── web/
             ├── <entity>/
             │   ├── <Entity>Controller.java    # @RestController,import usecase 層的 <Action>Command
-            │   └── <Entity>Response.java      # 輸出(不叫 Dto)
+            │   └── <Entity>Response.java      # 輸出
             └── exception/GlobalExceptionHandler.java  # @RestControllerAdvice
 ```
 
