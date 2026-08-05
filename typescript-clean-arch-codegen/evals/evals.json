@@ -1,0 +1,39 @@
+{
+  "skill_name": "typescript-clean-arch-codegen",
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "我在寫一個 NestJS + TypeORM 的 Node.js 專案,想要用 clean architecture 幫我刻一個 Order 實體。欄位有 id (number)、customerId (number)、totalAmount (number)、status (PENDING/PAID/CANCELLED)。業務規則:cancel() 只有 PENDING 狀態可以取消,取消後要發送一個 OrderCancelledEvent。需要串接一個外部 PaymentClient 去查金流狀態(用 client adapter 包起來就好,SDK 細節你自己編)。API 要有 POST /api/orders 建立訂單、PUT /api/orders/{id}/cancel 取消訂單、GET /api/orders/{id} 查詢。這是這個專案第一次刻這種分層,麻煩先幫我確認一下 TDD 流程,先寫測試再寫實作。",
+      "expected_output": "Full compilable TypeScript clean-architecture layer set for Order (domain/usecase/adapter-outbound/adapter-inbound) on the NestJS+TypeORM+Zod+Vitest stack, plus the one-time shared kernel (domain/usecase errors, event publisher port + Nest adapter, Zod pipe, global exception filter), plus domain and usecase Vitest tests written before implementation.",
+      "files": [],
+      "assertions": [
+        "Generates the one-time shared kernel files (domain/errors.ts with InvalidStateError/InvalidArgumentError, usecase/errors.ts with NotFoundError, usecase/event-publisher.port.ts, adapter/outbound/event/nest-event-publisher.adapter.ts, adapter/inbound/http/pipes/zod-validation.pipe.ts, adapter/inbound/http/filters/global-exception.filter.ts) since this is stated as the project's first use of the skill",
+        "Domain layer (order.ts / order-status.ts) imports no npm packages, only sibling domain files and the shared errors module",
+        "Each use case (create, cancel, get) gets its own separate Inbound Port interface file and its own UseCaseImpl file — no single fat interface/class covering all three actions",
+        "Every port interface (Inbound and Outbound) has a co-located exported Symbol DI token used via @Inject in the corresponding UseCaseImpl/Controller constructor",
+        "The write command (e.g. CreateOrderCommand) is defined as a Zod schema in the usecase layer's command/ folder and imported by the Controller, not redefined as a separate DTO in the adapter/inbound layer",
+        "Domain and usecase test files are produced and are TDD-ordered before their corresponding implementation files, using Vitest (describe/it, vi.fn() for usecase mocks, no mocking in domain tests)",
+        "The OrderRepository Outbound Port uses the standard getById/save signature returning Promise<Order | null> / Promise<Order>, and cancel's UseCaseImpl throws the shared NotFoundError (not a per-entity exception) when getById returns null",
+        "The PaymentClient external dependency is placed under adapter/outbound/client/ as a *Adapter class implementing a *Client port, with a custom Error subclass wrapping the underlying failure",
+        "The Order Controller does not import anything from the domain/ directory, and returns an OrderResponse wrapping OrderResult from the usecase layer",
+        "File names and class names follow the skill's derivation table (kebab-case files with the documented suffixes like .usecase.ts, .repository.ts, .controller.ts; PascalCase classes)"
+      ]
+    },
+    {
+      "id": 1,
+      "prompt": "同一個專案裡,我還想加一個 Coupon 實體,欄位是 id (number)、code (string)、discountPercent (number)。目前只需要一個 GET /api/coupons/{id} 查詢功能就好,先不用寫測試。這個專案已經有共用的錯誤處理基礎設施了(domain/errors.ts、usecase/errors.ts、usecase/event-publisher.port.ts、adapter/outbound/event/nest-event-publisher.adapter.ts、adapter/inbound/http/pipes/zod-validation.pipe.ts、adapter/inbound/http/filters/global-exception.filter.ts 這幾個檔案在刻 Order 實體時已經產生過),不要重複產生,直接沿用。",
+      "expected_output": "TypeScript clean-architecture layer set for a read-only Coupon entity (domain/usecase/adapter-outbound/adapter-inbound), reusing the existing shared kernel without regenerating it, no test files since none were requested.",
+      "files": [],
+      "assertions": [
+        "Does NOT regenerate any of the shared kernel files the user said already exist (domain/errors.ts, usecase/errors.ts, usecase/event-publisher.port.ts, adapter/outbound/event/nest-event-publisher.adapter.ts, pipes/zod-validation.pipe.ts, filters/global-exception.filter.ts)",
+        "Produces Coupon domain files (coupon.ts) with no status enum since Coupon has no status field",
+        "Produces exactly one Inbound Port + Impl for the single GetCouponUseCase query, not extra create/update/delete use cases that weren't requested",
+        "Produces a CouponRepository Outbound Port and CouponRepositoryImpl (TypeORM DataModel + Mapper + RepositoryImpl) even though only a GET endpoint was requested, since persistence is still needed to read the entity",
+        "No Command file / Zod schema is produced since there is no write endpoint (GET only, no request body)",
+        "No test files (.spec.ts) are produced, matching the user's explicit 'don't write tests' request",
+        "Produces a CouponController with a single GET /api/coupons/:id endpoint and a CouponModule wiring the repository and use case tokens",
+        "Coupon Controller does not import anything from the domain/ directory"
+      ]
+    }
+  ]
+}
