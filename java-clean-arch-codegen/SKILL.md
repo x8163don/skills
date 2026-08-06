@@ -26,7 +26,7 @@ description: Use when the user wants to implement a new feature or entity in a J
 5. **Adapter/Inbound 只做轉換**:Controller 僅路由 → 呼叫 UseCase → 包裝 Response;寫入型輸入物件 `<Action>Command` 是從 usecase 層 import 使用(不叫 Request/Dto,本層不自己定義一份),搭配 `@Valid @RequestBody`;`GlobalExceptionHandler`(`@RestControllerAdvice`)統一轉換:NotFound → 404、`IllegalArgumentException` 與驗證失敗 → 400、其他 → 500;`<Entity>Response` 包裝 Usecase 回傳的 `<Entity>Result` 後回傳(不是 Domain,不叫 Dto);本層一律不 import `domain` package。
 6. **命名一律依推導表**:所有類別名稱與 package 路徑依 `references/architecture.md` 的命名推導表從 Entity 名稱產生,不自創命名。
 7. **每個檔案完整可編譯**:含 package 宣告、全部 import(逐一明確列出,不使用萬用字元 `*`)、完整方法實作,零 TODO、零 `UnsupportedOperationException`。
-8. **產生順序固定**:(測試 →)Domain → Usecase → Adapter/Outbound → Adapter/Inbound;有測試描述時,測試先於實作產生。
+8. **產生順序固定**:(Domain 測試 →)Domain → Usecase → Adapter/Outbound → Adapter/Inbound → Controller-level 整合測試;有測試描述時,Domain 測試先於實作產生,Controller-level 整合測試則等四層都產完、可編譯後才產(見 `references/testing_principles.md` 的兩層測試原則)。
 
 ## 固定輸出格式
 
@@ -41,12 +41,12 @@ description: Use when the user wants to implement a new feature or entity in a J
 <完整 Java 原始碼>
 ```
 
-未提供 base package 時,一律使用 `com.example.<project>` 並在輸出開頭註明。
+未提供 base package 時,一律使用 `com.example.<project>` 並在輸出開頭註明。測試檔案(`<Entity>Test.java`、`<Entity>ControllerIntegrationTest.java`)的 `File:` 標頭路徑用 `src/test/java/...`,不是 `src/main/java/...`。
 
 ## 工作流程
 
 1. **解析與確認**:從輸入提取 Entity 名稱(PascalCase)、Fields(Java 型別)、Business Rules(→ 方法簽名)、Outbound Dependencies、API Endpoints、Tests。輸入為段落描述時,自行整理成規格並請用戶確認;僅在 Entity 名稱或 Fields 完全缺失時才暫停詢問。輸入格式見 `references/architecture.md`。
-2. **(TDD)先產測試**:規格含測試描述時,產生 `<Entity>Test.java`(JUnit 5、無 mock、每條業務規則一個正常案例 + 至少一個邊界案例)與每個 use case 情境各自的 `<Action><Entity>UseCaseImplTest.java`(JUnit 5 + Mockito,`@Mock` 該 use case 用到的 Outbound Port、`@InjectMocks` 對應 Impl)。
+2. **(TDD)先產 Domain 測試**:規格含測試描述時,產生 `<Entity>Test.java`(JUnit 5、無 mock、每條業務規則一個正常案例 + 至少一個邊界案例)。這個 skill 只有兩層測試(見 `references/testing_principles.md`),usecase 層不產生獨立的 mock test。
 3. **依序產生四層**:每層產生前先讀取對應 reference 的模板:
 
    | 層 | Reference | 產出檔案 |
@@ -57,7 +57,8 @@ description: Use when the user wants to implement a new feature or entity in a J
    | Adapter/Outbound | `references/adapter_outbound_layer.md` | JPA Entity、Mapper、JpaRepository、RepositoryImpl、(Client/Messaging/Cache/Notification/Storage Adapter) |
    | Adapter/Inbound | `references/adapter_inbound_layer.md` | Response、Controller、GlobalExceptionHandler(Command 已在 Usecase 產出,此處直接 import) |
 
-4. **逐層檢查**:每層完成後對照該 reference 的「規則」小節與本文件「產出前檢查」。
+4. **產第二層測試**:四層都產生完、確定可編譯之後,產生 `<Entity>ControllerIntegrationTest.java`(Testcontainers 起真實 DB,從 HTTP 一路測到資料庫,見 `references/adapter_inbound_layer.md` 文末章節)。
+5. **逐層檢查**:每層完成後對照該 reference 的「規則」小節與本文件「產出前檢查」。
 
 ## 簡單範例
 
@@ -143,3 +144,5 @@ public class Booking {
 - [ ] Controller 無 if/else 業務邏輯;回傳皆為 `<Entity>Response`;輸入物件皆為 `<Action>Command`(無 Request/Dto 命名);不 import `domain` package
 - [ ] 所有類別名稱符合命名推導表
 - [ ] 每個檔案有輸出標頭、完整 import、零 TODO
+- [ ] 只有兩層測試(`references/testing_principles.md`):Domain test 無 mock;沒有 usecase 層 mock test、沒有 adapter-outbound 層獨立 test
+- [ ] `<Entity>ControllerIntegrationTest.java` 用 Testcontainers 起真實 DB(不是 H2/sqlite),涵蓋主要業務規則的正向與至少一個負向情境;第三方 SaaS 依賴才用 `@MockBean`,其餘真實;寫入操作有再查一次資料庫確認狀態落地

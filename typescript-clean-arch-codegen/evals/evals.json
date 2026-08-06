@@ -4,7 +4,7 @@
     {
       "id": 0,
       "prompt": "我在寫一個 NestJS + TypeORM 的 Node.js 專案,想要用 clean architecture 幫我刻一個 Order 實體。欄位有 id (number)、customerId (number)、totalAmount (number)、status (PENDING/PAID/CANCELLED)。業務規則:cancel() 只有 PENDING 狀態可以取消,取消後要發送一個 OrderCancelledEvent。需要串接一個外部 PaymentClient 去查金流狀態(用 client adapter 包起來就好,SDK 細節你自己編)。API 要有 POST /api/orders 建立訂單、PUT /api/orders/{id}/cancel 取消訂單、GET /api/orders/{id} 查詢。這是這個專案第一次刻這種分層,麻煩先幫我確認一下 TDD 流程,先寫測試再寫實作。",
-      "expected_output": "Full compilable TypeScript clean-architecture layer set for Order (domain/usecase/adapter-outbound/adapter-inbound) on the NestJS+TypeORM+Zod+Vitest stack, plus the one-time shared kernel (domain/usecase errors, event publisher port + Nest adapter, Zod pipe, global exception filter), plus domain and usecase Vitest tests written before implementation.",
+      "expected_output": "Full compilable TypeScript clean-architecture layer set for Order (domain/usecase/adapter-outbound/adapter-inbound) on the NestJS+TypeORM+Zod+Vitest stack, plus the one-time shared kernel (domain/usecase errors, event publisher port + Nest adapter, Zod pipe, global exception filter), plus a domain Vitest test written before implementation and a testcontainers-backed controller-level e2e test written after all four layers exist — no separate usecase-mock or adapter-outbound test files.",
       "files": [],
       "assertions": [
         "Generates the one-time shared kernel files (domain/errors.ts with InvalidStateError/InvalidArgumentError, usecase/errors.ts with NotFoundError, usecase/event-publisher.port.ts, adapter/outbound/event/nest-event-publisher.adapter.ts, adapter/inbound/http/pipes/zod-validation.pipe.ts, adapter/inbound/http/filters/global-exception.filter.ts) since this is stated as the project's first use of the skill",
@@ -12,7 +12,10 @@
         "Each use case (create, cancel, get) gets its own separate Inbound Port interface file and its own UseCaseImpl file — no single fat interface/class covering all three actions",
         "Every port interface (Inbound and Outbound) has a co-located exported Symbol DI token used via @Inject in the corresponding UseCaseImpl/Controller constructor",
         "The write command (e.g. CreateOrderCommand) is defined as a Zod schema in the usecase layer's command/ folder and imported by the Controller, not redefined as a separate DTO in the adapter/inbound layer",
-        "Domain and usecase test files are produced and are TDD-ordered before their corresponding implementation files, using Vitest (describe/it, vi.fn() for usecase mocks, no mocking in domain tests)",
+        "A domain test file (order.spec.ts) is produced and is TDD-ordered before the domain implementation, using Vitest (describe/it, no mocking) — and no separate usecase-layer mock test file (e.g. *.usecase.spec.ts with vi.fn() mocking Outbound Ports) is produced",
+        "A controller-level e2e test (order.controller.e2e-spec.ts) is produced only after all four layers exist, starts a real database via testcontainers (not an in-memory sqlite/better-sqlite3 substitute) inside beforeAll/afterAll, and only stubs the third-party PaymentClient — everything else (repository, DB) is real",
+        "The e2e test's write-path assertions don't just check the HTTP response — they re-query (e.g. a follow-up GET) to confirm the state actually persisted in the database",
+        "No adapter-outbound layer test file (e.g. *.mapper.spec.ts, *.repository-impl.spec.ts) is produced",
         "The OrderRepository Outbound Port uses the standard getById/save signature returning Promise<Order | null> / Promise<Order>, and cancel's UseCaseImpl throws the shared NotFoundError (not a per-entity exception) when getById returns null",
         "The PaymentClient external dependency is placed under adapter/outbound/client/ as a *Adapter class implementing a *Client port, with a custom Error subclass wrapping the underlying failure",
         "The Order Controller does not import anything from the domain/ directory, and returns an OrderResponse wrapping OrderResult from the usecase layer",

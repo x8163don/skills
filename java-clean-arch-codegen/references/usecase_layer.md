@@ -286,59 +286,6 @@ public class Get<Entity>UseCaseImpl implements Get<Entity>UseCase {
 }
 ```
 
-## 單元測試模板(TDD 時先產)
+## 測試
 
-一個 use case 一個測試類別,命名 `<Action><Entity>UseCaseImplTest`,只 `@Mock` 這個 use case 真正用到的 Outbound Port:
-
-```java
-package <basePackage>.usecase.<entity>;
-
-import <basePackage>.domain.<entity>.*;
-import <basePackage>.usecase.<entity>.port.<Entity>Repository;
-import <basePackage>.usecase.<entity>.port.DomainEventPublisher;
-import <basePackage>.usecase.<entity>.result.<Entity>Result;
-import <basePackage>.usecase.<entity>.exception.<Entity>NotFoundException;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-
-import java.util.Optional;
-
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
-
-@ExtendWith(MockitoExtension.class)
-class <Action><Entity>UseCaseImplTest {
-
-    @Mock
-    private <Entity>Repository <entity>Repository;
-
-    @Mock
-    private DomainEventPublisher eventPublisher;
-
-    @InjectMocks
-    private <Action><Entity>UseCaseImpl <entity>UseCase;
-
-    @Test
-    void <useCaseMethod>_success() {
-        <Entity> <entity> = new <Entity>(1L, <args>);
-        when(<entity>Repository.getById(1L)).thenReturn(Optional.of(<entity>));
-        when(<entity>Repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-
-        <Entity>Result result = <entity>UseCase.<useCaseMethod>(1L);
-
-        assertEquals(<expected>, result.<field>());   // record accessor,不是 get<Field>()
-        verify(eventPublisher).publish(any());
-    }
-
-    @Test
-    void <useCaseMethod>_notFound_throws() {
-        when(<entity>Repository.getById(99L)).thenReturn(Optional.empty());
-
-        assertThrows(<Entity>NotFoundException.class, () -> <entity>UseCase.<useCaseMethod>(99L));
-    }
-}
-```
+Usecase 層本身不產生獨立測試檔案。它只做 orchestration(呼叫 Repository → 操作 Domain → save → publish 事件),不藏業務規則,所以邏輯正確性已經被 Domain 層的 `<Entity>Test.java` 涵蓋;它有沒有正確呼叫到 Outbound Port、串接是否正確,則由 Adapter/Inbound 層的 Controller-level 整合測試(用 Testcontainers 起真實 DB,一路測到底)涵蓋。原因與完整規則見 `references/testing_principles.md`。

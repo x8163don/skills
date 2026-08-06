@@ -124,15 +124,20 @@ export class BookingModule {}
 
 全域錯誤處理與驗證 Pipe 的模板與產出時機見 `references/architecture.md` 的「共用基礎設施」章節——`GlobalExceptionFilter` 要在 `main.ts` 用 `app.useGlobalFilters(new GlobalExceptionFilter())` 註冊一次,不是每個 entity 各自的檔案,不要重複產生。
 
-## e2e 測試模板(規格含測試描述時產生)
+## Controller-level 整合測試(唯一的測試層,規格含測試描述時產生)
 
-**測試走 e2e,不 mock Inbound Port**:`<entity>.controller.e2e-spec.ts` 用 `@nestjs/testing` 的 `Test.createTestingModule` 組出一個真實的 `<Entity>Module`(搭配記憶體 SQLite 的 `TypeOrmModule.forRoot`,不是 mock Repository),掛上 `GlobalExceptionFilter`,再用 `supertest` 對它發真實 HTTP request——目標是盡量測完整條路線(HTTP → Controller → UseCase → Repository → DB),不是只測 Controller 這一層的參數轉換。斷言不能只看 HTTP 回應,方便時再查一次資料庫(或用下一個 request 查詢)確認資料真的被寫成預期的樣子。
+**測試走整合測試,不 mock Inbound Port,也不 mock Repository**:`<entity>.controller.e2e-spec.ts` 用 `@nestjs/testing` 的 `Test.createTestingModule` 組出一個真實的 `<Entity>Module`,資料庫用 [`testcontainers`](https://node.testcontainers.org/) 在測試啟動時起一個跟正式環境同一種 image 的真實容器(下面以 Postgres 為例,實際要起哪種 image 依專案技術決策而定,MySQL 就換 `@testcontainers/mysql`),`TypeOrmModule.forRoot` 接容器回傳的連線資訊——不用記憶體 SQLite 這種替代品,因為它在型別轉換、鎖、SQL 方言上都可能跟正式環境的 DB 不一致,測試綠燈救不了正式環境的問題。掛上 `GlobalExceptionFilter`,再用 `supertest` 對它發真實 HTTP request——目標是盡量測完整條路線(HTTP → Controller → UseCase → Repository → DB),不是只測 Controller 這一層的參數轉換。斷言不能只看 HTTP 回應,方便時再查一次資料庫(或用下一個 request 查詢)確認資料真的被寫成預期的樣子。若這個 use case 還依賴 Redis 等其他有狀態外部元件,一併用對應的 testcontainers 模組(如 `@testcontainers/redis`)起真實 container;只有沒有可信賴 image 的第三方 SaaS API(如 Stripe、Twilio)才用 `.overrideProvider(TOKEN).useValue(stub)` 蓋掉那一個 Outbound Port,其餘依賴一律真實。理由與兩層測試原則的完整說明見 `references/testing_principles.md`。
+
+這是這個 skill 產生的**唯一**測試層級——usecase 層與 adapter-outbound 層不再各自產生獨立測試,詳見 `references/testing_principles.md`。
+
+需要先安裝 `testcontainers` 與對應的 module 套件(如 `npm install -D testcontainers`),並確保執行環境有 Docker。
 
 ```typescript
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { PostgreSqlContainer, StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { GlobalExceptionFilter } from '../filters/global-exception.filter';
@@ -141,14 +146,21 @@ import { BookingModule } from './booking.module';
 
 describe('BookingController (e2e)', () => {
   let app: INestApplication;
+  let container: StartedPostgreSqlContainer;
 
   beforeAll(async () => {
+    container = await new PostgreSqlContainer('postgres:16-alpine').start();
+
     const moduleRef = await Test.createTestingModule({
       imports: [
         EventEmitterModule.forRoot(),
         TypeOrmModule.forRoot({
-          type: 'better-sqlite3',
-          database: ':memory:',
+          type: 'postgres',
+          host: container.getHost(),
+          port: container.getPort(),
+          username: container.getUsername(),
+          password: container.getPassword(),
+          database: container.getDatabase(),
           entities: [BookingDataModel],
           synchronize: true,
         }),
@@ -159,10 +171,11 @@ describe('BookingController (e2e)', () => {
     app = moduleRef.createNestApplication();
     app.useGlobalFilters(new GlobalExceptionFilter());
     await app.init();
-  });
+  }, 60_000); // 起 container 需要較長的 timeout
 
   afterAll(async () => {
     await app.close();
+    await container.stop();
   });
 
   it('POST /api/bookings creates a booking', async () => {

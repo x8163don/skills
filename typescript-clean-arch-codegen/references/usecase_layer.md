@@ -255,51 +255,6 @@ export class GetBookingUseCaseImpl implements GetBookingUseCase {
 }
 ```
 
-## 單元測試模板(TDD 時先產)
+## 測試
 
-一個 use case 一個測試檔,命名 `<action>-<entity>.usecase.spec.ts`,用 `vi.fn()` 手寫該 use case 真正用到的 Outbound Port 的假物件——不需要透過 Nest 的 `Test.createTestingModule` 起一個完整 DI 容器,UseCaseImpl 的建構子是 plain constructor,直接 `new` 並傳入 mock 物件即可,跑得更快:
-
-```typescript
-// usecase/booking/confirm-booking.usecase.spec.ts
-import { describe, expect, it, vi } from 'vitest';
-import { Booking } from '../../domain/booking/booking';
-import { BookingStatus } from '../../domain/booking/booking-status';
-import { DomainEventPublisher } from '../event-publisher.port';
-import { NotFoundError } from '../errors';
-import { ConfirmBookingUseCaseImpl } from './confirm-booking.usecase';
-import { BookingRepository } from './port/booking.repository';
-
-function createMockRepository(): BookingRepository {
-  return { getById: vi.fn(), save: vi.fn() };
-}
-
-function createMockPublisher(): DomainEventPublisher {
-  return { publish: vi.fn() };
-}
-
-describe('ConfirmBookingUseCaseImpl', () => {
-  it('confirms a pending booking and publishes an event', async () => {
-    const repository = createMockRepository();
-    const publisher = createMockPublisher();
-    const booking = new Booking(1, 'field', BookingStatus.PENDING);
-    vi.mocked(repository.getById).mockResolvedValue(booking);
-    vi.mocked(repository.save).mockImplementation(async (b) => b);
-
-    const useCase = new ConfirmBookingUseCaseImpl(repository, publisher);
-    const result = await useCase.confirm(1);
-
-    expect(result.status).toBe(BookingStatus.CONFIRMED);
-    expect(publisher.publish).toHaveBeenCalledOnce();
-  });
-
-  it('throws NotFoundError when the booking does not exist', async () => {
-    const repository = createMockRepository();
-    const publisher = createMockPublisher();
-    vi.mocked(repository.getById).mockResolvedValue(null);
-
-    const useCase = new ConfirmBookingUseCaseImpl(repository, publisher);
-
-    await expect(useCase.confirm(99)).rejects.toThrow(NotFoundError);
-  });
-});
-```
+Usecase 層不產生獨立的單元測試檔案(不再用 `vi.fn()` mock Outbound Port)。這一層只做 orchestration(呼叫 Domain 業務方法、串接 Repository/Port、決定何時 publish 事件),本身不藏業務規則,所以邏輯正確性已經被 Domain aggregate test 涵蓋;它有沒有正確呼叫 Outbound Port、事件有沒有真的送出,則由 Adapter/Inbound 層的 controller-level integration test(用 testcontainer 起真實 DB 跑完整路線)涵蓋。理由與兩層測試原則的完整說明見 `references/testing_principles.md`。

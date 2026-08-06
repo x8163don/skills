@@ -20,13 +20,13 @@
 
    五類結構完全相同(見下方模板),只有子目錄、Port 介面名稱、error 型別名稱不同。
 8. 事件發送使用 `InProcessEventPublisher`,實作 Usecase 的 `DomainEventPublisher`,以 handler function 清單的形式在程序內同步呼叫——這是 in-process 的 domain event,跟 `messaging/`(對外部訊息佇列發送)是不同用途,不可混用。
-9. **測試**:`<entity>_mapper_test.go` 是純函式測試,不需要任何測試替身,table-driven 涵蓋正常轉換與 nil 輸入;`<entity>_repository_test.go` 不 mock DB 驅動,改用記憶體 SQLite(`github.com/glebarez/sqlite`,純 Go 實作、免 CGO)搭配 GORM 跑真實查詢,`AutoMigrate` 對應的 DataModel 後直接測 `Save`/`GetByID`——避免手動比對 GORM 產生的 SQL 語句這種脆弱的斷言方式。外部依賴 Adapter(`client`/`messaging`/`cache`/`notification`/`storage`)預設不產生測試:這層是薄薄的第三方 SDK 轉接層,要測就得先把 SDK 呼叫包成可注入的介面欄位、再用 `testify/mock` 假冒,做法因 SDK 而異,不強行套統一模板。
+9. **測試**:這層不產生獨立測試檔案。Mapper 的轉換正確性與 Repository 的查詢/寫入行為,已經在 Adapter/Inbound 層的 controller-level integration test(用 testcontainer 起真實 DB,見 `references/testing_principles.md`)裡用真實 DB 跑過一次;另外用記憶體 SQLite 寫一份 repository test,測的是「跟記憶體 SQLite 相容」而不是「跟正式環境的 DB 相容」,容易在假資料庫測試綠燈但正式 DB(型別轉換、鎖、SQL 方言不同)行為不一致時被蓋牌,所以不再產生。
 
 ## 產出檔案(依序)
 
 1. `datamodel/<entity>_data_model.go`
-2. `mapper/<entity>_mapper.go`(+ `mapper/<entity>_mapper_test.go`,如有測試描述)
-3. `<entity>_repository.go`(RepositoryImpl)(+ `<entity>_repository_test.go`,如有測試描述)
+2. `mapper/<entity>_mapper.go`
+3. `<entity>_repository.go`(RepositoryImpl)
 4. `<category>/<provider>_<concept>_adapter.go`(如有 Client/Messaging/Cache/Notification/Storage Port,`<category>` 依規則 7 的分類表擇一)
 5. `event/in_process_event_publisher.go`(如有事件 Port,且專案尚未產生過)
 
@@ -202,105 +202,5 @@ func (p *InProcessEventPublisher) Publish(ctx context.Context, event any) error 
 		}
 	}
 	return nil
-}
-```
-
-## 單元測試模板(規格含測試描述時產生)
-
-### Mapper 測試 `mapper/<entity>_mapper_test.go`
-
-純函式,不需要測試替身:
-
-```go
-package mapper
-
-import (
-	"testing"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
-	"<basePackage>/internal/adapter/outbound/repository/datamodel"
-	"<basePackage>/internal/domain/booking"
-)
-
-func TestToDomain(t *testing.T) {
-	dm := &datamodel.BookingDataModel{ID: 1, Field: "value", Status: "VALUE_1"}
-
-	got, err := ToDomain(dm)
-
-	require.NoError(t, err)
-	assert.Equal(t, int64(1), got.ID())
-	assert.Equal(t, domain.StatusValue1, got.Status())
-}
-
-func TestToDomain_Nil(t *testing.T) {
-	got, err := ToDomain(nil)
-
-	require.NoError(t, err)
-	assert.Nil(t, got)
-}
-
-func TestToDataModel(t *testing.T) {
-	b, err := domain.NewBooking(1, "value", domain.StatusValue1)
-	require.NoError(t, err)
-
-	got := ToDataModel(b)
-
-	assert.Equal(t, int64(1), got.ID)
-	assert.Equal(t, "VALUE_1", got.Status)
-}
-```
-
-### Repository 測試 `<entity>_repository_test.go`
-
-用記憶體 SQLite 跑真實 GORM 查詢,不 mock SQL 驅動:
-
-```go
-package repository
-
-import (
-	"context"
-	"testing"
-
-	"github.com/glebarez/sqlite"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
-
-	"<basePackage>/internal/adapter/outbound/repository/datamodel"
-	"<basePackage>/internal/domain/booking"
-)
-
-func newTestDB(t *testing.T) *gorm.DB {
-	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&datamodel.BookingDataModel{}))
-	return db
-}
-
-func TestBookingRepositoryImpl_GetByID(t *testing.T) {
-	db := newTestDB(t)
-	repo := NewBookingRepositoryImpl(db)
-
-	t.Run("found", func(t *testing.T) {
-		b, err := domain.NewBooking(0, "value", domain.StatusValue1)
-		require.NoError(t, err)
-		saved, err := repo.Save(context.Background(), b)
-		require.NoError(t, err)
-
-		got, err := repo.GetByID(context.Background(), saved.ID())
-
-		require.NoError(t, err)
-		assert.Equal(t, saved.ID(), got.ID())
-	})
-
-	t.Run("not found returns nil, nil", func(t *testing.T) {
-		got, err := repo.GetByID(context.Background(), 999)
-
-		require.NoError(t, err)
-		assert.Nil(t, got)
-	})
 }
 ```

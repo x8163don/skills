@@ -1,5 +1,7 @@
 # Adapter/Inbound 層 — 通訊與應用進入點(Interface Adapters,被外部驅動的一側)
 
+這一層產完之後,還要產生 Controller-level 整合測試(見文末章節),是整個 skill 唯二兩層測試中的第二層——完整原則見 `references/testing_principles.md`。
+
 ## 規則
 
 1. Spring MVC 註解(`@RestController`, `@RequestMapping` 等)只出現在本層。
@@ -16,6 +18,7 @@
 1. `<Entity>Response.java`
 2. `<Entity>Controller.java`
 3. `exception/GlobalExceptionHandler.java`
+4. `<Entity>ControllerIntegrationTest.java`(Controller-level 整合測試,四層都產生完、確定可編譯後才產,見文末章節)
 
 `<Action>Command.java` 在 usecase 層產生(見 `references/usecase_layer.md`),本層不重複產出。
 
@@ -152,6 +155,97 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, String>> handleGeneral(Exception ex) {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(Map.of("error", "Internal server error"));
+    }
+}
+```
+
+## Controller-level 整合測試(Testcontainers)
+
+這是整個 skill 唯二兩層測試(見 `references/testing_principles.md`)裡的第二層,四層都產生完、確定可以編譯之後才產生。目標是把 HTTP → Controller → UseCase → Repository → 真實資料庫這條完整路線串起來測一次,不 mock Repository、不用 H2/sqlite 這種 in-memory 替代品——用 [Testcontainers](https://testcontainers.com/) 起一個跟正式環境同一種 image 的 DB(以下用 Postgres 示範,實際專案是 MySQL/MariaDB 時把 `PostgreSQLContainer` 換成對應 module,其餘寫法相同)。
+
+只有第三方 SaaS 依賴(如 `PaymentClient` 這種 `client/` 分類、沒有可信賴 testcontainers image 的外部 API)才用 `@MockBean` 蓋掉那一個 Outbound Port,其餘(Repository、in-process 事件)全部真實。斷言不能只看 HTTP 回應——寫入操作要再用 `<Entity>JpaRepository` 查一次,確認資料真的落地。
+
+需要的 test 依賴(`pom.xml`,`<scope>test</scope>`):`org.testcontainers:junit-jupiter`、`org.testcontainers:postgresql`(或對應 DB 的 module)。
+
+```java
+// === Adapter/Inbound Layer ===
+// File: src/test/java/<basePackage 路徑>/adapter/inbound/web/<entity>/<Entity>ControllerIntegrationTest.java
+
+package <basePackage>.adapter.inbound.web.<entity>;
+
+import <basePackage>.adapter.outbound.repository.<Entity>JpaRepository;
+import <basePackage>.adapter.outbound.repository.datamodel.<Entity>DataModel;
+import <basePackage>.usecase.<entity>.port.<Concept>Client;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
+
+@Testcontainers
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+class <Entity>ControllerIntegrationTest {
+
+    @Container
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+
+    @DynamicPropertySource
+    static void registerDatasource(DynamicPropertyRegistry registry) {
+        registry.add("spring.datasource.url", postgres::getJdbcUrl);
+        registry.add("spring.datasource.username", postgres::getUsername);
+        registry.add("spring.datasource.password", postgres::getPassword);
+    }
+
+    @Autowired
+    private TestRestTemplate restTemplate;
+
+    @Autowired
+    private <Entity>JpaRepository <entity>JpaRepository;
+
+    // 沒有可信賴 testcontainers image 的第三方 SaaS 依賴,才 mock 這一個 Outbound Port
+    @MockBean
+    private <Concept>Client <concept>Client;
+
+    @LocalServerPort
+    private int port;
+
+    @Test
+    void <action>_persistsNewStatusToDatabase() {
+        when(<concept>Client.<clientMethod>(any())).thenReturn(<stubResult>);
+
+        <Entity>DataModel saved = <entity>JpaRepository.save(
+            new <Entity>DataModel(null, <args>, "<INITIAL_STATE>"));
+
+        ResponseEntity<<Entity>Response> response = restTemplate.exchange(
+            "/api/<entities>/" + saved.getId() + "/<action>",
+            org.springframework.http.HttpMethod.PUT, null, <Entity>Response.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody().getStatus()).isEqualTo("<EXPECTED_STATE>");
+
+        // 不能只看回應——再查一次資料庫確認狀態真的被更新
+        <Entity>DataModel refetched = <entity>JpaRepository.findById(saved.getId()).orElseThrow();
+        assertThat(refetched.getStatus()).isEqualTo("<EXPECTED_STATE>");
+    }
+
+    @Test
+    void getById_returns404_whenMissing() {
+        ResponseEntity<String> response = restTemplate.getForEntity("/api/<entities>/999999", String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
 }
 ```

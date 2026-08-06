@@ -1,13 +1,13 @@
 ---
 name: go-clean-arch-codegen
-description: Use when the user wants to implement a new feature or entity in a Go project using Clean Architecture / Hexagonal Architecture layers (Domain/Entities, Usecase, Adapter — split into Outbound and Inbound sides of Interface Adapters), generating idiomatic Go (Gin handlers, GORM repositories, testify/mock tests, error-return style instead of exceptions). Triggers on an entity spec with fields/business rules, "generate Go layers for X", "implement X with clean architecture in Go", "scaffold X entity in Go", "write TDD implementation for X in Go", or requirement + test descriptions in a Go project. Invoke even for partial specs — ask only for missing critical info (entity name or fields).
+description: Use when the user wants to implement a new feature or entity in a Go project using Clean Architecture / Hexagonal Architecture layers (Domain/Entities, Usecase, Adapter — split into Outbound and Inbound sides of Interface Adapters), generating idiomatic Go (Gin handlers, GORM repositories, testcontainers-go integration tests, error-return style instead of exceptions). Triggers on an entity spec with fields/business rules, "generate Go layers for X", "implement X with clean architecture in Go", "scaffold X entity in Go", "write TDD implementation for X in Go", or requirement + test descriptions in a Go project. Invoke even for partial specs — ask only for missing critical info (entity name or fields).
 ---
 
 # Go Clean Architecture Code Generator
 
 ## 目的
 
-根據實體規格(Entity Spec)產生完整、可編譯的 Go 分層程式碼(Domain → Usecase → Adapter/Outbound → Adapter/Inbound),對應 Clean Architecture 的 Entities → Use Cases → Interface Adapters 三圈(Adapter 依方向拆為 Outbound/Inbound 兩側,合稱 Interface Adapters;Frameworks & Drivers 第四圈不獨立成 package,詳見 `references/architecture.md`)。技術選型固定為 **Gin**(HTTP)+ **GORM**(持久化)+ **testify/mock**(usecase 層測試替身)。所有型別名稱、package 路徑、檔案位置皆由固定模板推導,確保多次產出結果高度一致,且是這個技術棧下慣用的 Go 寫法(interface + 建構函式注入、`error` 回傳值、`context.Context` 貫穿、table-driven 測試)。
+根據實體規格(Entity Spec)產生完整、可編譯的 Go 分層程式碼(Domain → Usecase → Adapter/Outbound → Adapter/Inbound),對應 Clean Architecture 的 Entities → Use Cases → Interface Adapters 三圈(Adapter 依方向拆為 Outbound/Inbound 兩側,合稱 Interface Adapters;Frameworks & Drivers 第四圈不獨立成 package,詳見 `references/architecture.md`)。技術選型固定為 **Gin**(HTTP)+ **GORM**(持久化)+ **testcontainers-go**(controller-level 整合測試,見 `references/testing_principles.md`)。所有型別名稱、package 路徑、檔案位置皆由固定模板推導,確保多次產出結果高度一致,且是這個技術棧下慣用的 Go 寫法(interface + 建構函式注入、`error` 回傳值、`context.Context` 貫穿、table-driven 測試)。
 
 ## 觸發時機
 
@@ -48,7 +48,7 @@ description: Use when the user wants to implement a new feature or entity in a G
 
 1. **解析與確認**:從輸入提取 Entity 名稱(PascalCase)、Fields(Go 型別)、Business Rules(→ 方法簽名)、Outbound Dependencies、API Endpoints、Tests。輸入為段落描述時,自行整理成規格並請用戶確認;僅在 Entity 名稱或 Fields 完全缺失時才暫停詢問。輸入格式見 `references/architecture.md`。
 2. **確認共用基礎設施**:詢問或依上下文判斷這是否是專案第一次使用本 skill;若是,先產生 `internal/domain/domainerr/domainerr.go`、`internal/usecase/usecaseerr/not_found.go`、`internal/adapter/inbound/http/middleware/error_handler.go`(模板見 `references/architecture.md`)。若專案已有這三個檔案,跳過此步驟。
-3. **(TDD)先產測試**:規格含測試描述時,產生 `<entity>_test.go`(table-driven、無 mock、每條業務規則一個正常案例 + 至少一個邊界案例)與每個 use case 情境各自的 `<action>_<entity>_test.go`(table-driven + `testify/mock`,只手寫該 use case 用到的 Outbound Port 的假物件)。
+3. **(TDD)先產 Domain test**:規格含測試描述時,先產生 `<entity>_test.go`(table-driven、無 mock、每條業務規則一個正常案例 + 至少一個邊界案例)。這是本 skill 唯一在 domain 層之外提前產生的測試——usecase 層與 adapter-outbound 層不再各自產生獨立測試(理由見 `references/testing_principles.md`),controller-level 的整合測試(`<entity>/handler_test.go`,見 `references/adapter_inbound_layer.md` 規則 9)要等四層都產生完、真正可以串起來跑之後才產生。
 4. **依序產生四層**:每層產生前先讀取對應 reference 的模板:
 
    | 層 | Reference | 產出檔案 |
@@ -59,7 +59,8 @@ description: Use when the user wants to implement a new feature or entity in a G
    | Adapter/Outbound | `references/adapter_outbound_layer.md` | GORM DataModel、Mapper、RepositoryImpl、(Client/Messaging/Cache/Notification/Storage Adapter) |
    | Adapter/Inbound | `references/adapter_inbound_layer.md` | Response、Handler(Command 已在 Usecase 產出,此處直接 import) |
 
-5. **逐層檢查**:每層完成後對照該 reference 的「規則」小節與本文件「產出前檢查」。
+5. **產生 controller-level 整合測試**:四層都產生完之後,產生 `<entity>/handler_test.go`(見 `references/adapter_inbound_layer.md` 規則 9 與模板),用 testcontainer 起真實 DB(以及專案實際依賴的其他有狀態外部元件)跑完整條路線,不 mock Repository。
+6. **逐層檢查**:每層完成後對照該 reference 的「規則」小節與本文件「產出前檢查」。
 
 ## 簡單範例
 
@@ -162,3 +163,4 @@ func (b *Booking) Status() Status   { return b.status }
 - [ ] `internal/domain/domainerr`、`internal/usecase/usecaseerr`、`middleware.ErrorHandler()` 若專案已存在則未重複產生
 - [ ] 所有型別名稱符合命名推導表
 - [ ] 每個檔案有輸出標頭、完整 import(無未使用 import)、零 TODO
+- [ ] usecase 層與 adapter-outbound 層沒有產生獨立測試檔案(`references/testing_principles.md`);`<entity>/handler_test.go` 用 testcontainer 起真實 DB,涵蓋主要業務規則的正向/負向情境,寫入操作有再查一次資料庫確認狀態真的落地

@@ -284,11 +284,8 @@ graph TD
 | 外部依賴 Adapter(client/messaging/cache/notification/storage 共用) | 依子目錄(`client`/`messaging`/...) | `<Provider><Concept>Adapter` | `internal/adapter/outbound/client/stripe_payment_adapter.go` |
 | HTTP Handler | `<entity>`(見下方註記) | `Handler`、`NewHandler(...)` | `internal/adapter/inbound/http/booking/handler.go` |
 | Response | `<entity>` | `Response`、`NewResponseFrom(result.BookingResult) Response` | `internal/adapter/inbound/http/booking/response.go` |
-| Domain 單元測試 | `domain` | `TestBooking_<BusinessMethod>` | `internal/domain/booking/booking_test.go` |
-| UseCase 單元測試(一個 use case 一個) | `usecase` | `Test<Action>BookingUseCaseImpl_<Method>` | `internal/usecase/booking/<action>_booking_test.go` |
-| Mapper 單元測試 | `mapper` | `TestToDomain`、`TestToDataModel` | `internal/adapter/outbound/repository/mapper/booking_mapper_test.go` |
-| Repository 單元測試 | `repository` | `TestBookingRepositoryImpl_<Method>` | `internal/adapter/outbound/repository/booking_repository_test.go` |
-| Handler e2e 測試(串真實 Usecase + Repository) | `<entity>` | `TestHandler_<Method>` | `internal/adapter/inbound/http/booking/handler_test.go` |
+| Domain 單元測試(Layer 1) | `domain` | `TestBooking_<BusinessMethod>` | `internal/domain/booking/booking_test.go` |
+| Handler e2e 測試(Layer 2,串真實 Usecase + Repository,見 `references/testing_principles.md`) | `<entity>` | `TestHandler_<Method>` | `internal/adapter/inbound/http/booking/handler_test.go` |
 
 **命名例外**:`domain`、`usecase`、`port`、`result`、`command`、`event`、`datamodel`、`mapper`、`repository` 這些 package 名稱在每個 entity 底下重複出現(靠目錄路徑,不是靠 package 名稱,區分不同 entity),同一個檔案通常只會 import 到其中一個 entity 的這些 package,不會撞名。但 `adapter/inbound/http/<entity>/` 這一層改用 **entity 名稱本身**當 package 名(如 `package booking`),不叫 `package http`——因為這一層的檔案幾乎必定同時 `import "net/http"`,若 package 也叫 `http` 會撞名。也因此,這個 package 內的型別**不重複加 entity 前綴**(`booking.Handler`、`booking.Response`,不是 `booking.BookingHandler`),避免 stutter。
 

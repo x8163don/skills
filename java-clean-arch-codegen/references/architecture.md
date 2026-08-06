@@ -114,8 +114,8 @@ graph TD
 | 外部依賴 Adapter(client/messaging/cache/notification/storage 共用) | `<Provider><Concept>Adapter.java` | `StripePaymentAdapter.java` |
 | REST Controller | `<Entity>Controller.java` | `BookingController.java` |
 | Response | `<Entity>Response.java` | `BookingResponse.java` |
-| Domain 單元測試 | `<Entity>Test.java` | `BookingTest.java` |
-| UseCase 單元測試(一個 use case 一個) | `<Action><Entity>UseCaseImplTest.java` | `ConfirmBookingUseCaseImplTest.java` |
+| Domain 單元測試(Layer 1) | `<Entity>Test.java` | `BookingTest.java` |
+| Controller-level 整合測試(Layer 2,Testcontainers) | `<Entity>ControllerIntegrationTest.java` | `BookingControllerIntegrationTest.java` |
 
 ## 輸入格式
 

@@ -20,13 +20,13 @@
 
    五類結構完全相同(見下方模板),只有子目錄、Port 介面名稱、例外名稱不同。
 8. 事件發送使用共用的 `NestDomainEventPublisherAdapter`(見 `references/architecture.md`),不要每個 entity 各自產生一份——這是 in-process 的 domain event,跟 `messaging/`(對外部訊息佇列發送)是不同用途,不可混用。
-9. **測試**:`<entity>.mapper.spec.ts` 是純函式測試,不需要任何測試替身;`<entity>.repository-impl.spec.ts` 不 mock TypeORM,改用 `better-sqlite3` 搭配 `type: 'better-sqlite3', database: ':memory:', synchronize: true` 起一個真實的記憶體 `DataSource` 跑真實查詢——避免手動比對 TypeORM 產生的 SQL 語句這種脆弱的斷言方式。外部依賴 Adapter(`client`/`messaging`/`cache`/`notification`/`storage`)預設不產生測試:這層是薄薄的第三方 SDK 轉接層,要測就得先把 SDK 呼叫包成可注入的欄位、再用 `vi.mock` 假冒,做法因 SDK 而異,不強行套統一模板。
+9. **不產生獨立測試**:`<entity>.mapper.ts`、`<entity>.repository-impl.ts` 跟外部依賴 Adapter 都不產生各自的 `.spec.ts`。Mapper/Repository 的正確性由 Adapter/Inbound 層的 controller-level integration test(用 testcontainer 起真實 DB 跑完整路線)涵蓋——再用假資料庫寫一份 Repository 測試,只是重複勞動,還可能在假資料庫測試綠燈但真實 DB 行為不一致時被蓋牌。理由與兩層測試原則的完整說明見 `references/testing_principles.md`。
 
 ## 產出檔案(依序)
 
 1. `datamodel/<entity>.data-model.ts`
-2. `mapper/<entity>.mapper.ts`(+ `mapper/<entity>.mapper.spec.ts`,如有測試描述)
-3. `<entity>.repository-impl.ts`(+ `<entity>.repository-impl.spec.ts`,如有測試描述)
+2. `mapper/<entity>.mapper.ts`
+3. `<entity>.repository-impl.ts`
 4. `<category>/<provider>-<concept>.adapter.ts`(如有 Client/Messaging/Cache/Notification/Storage Port,`<category>` 依規則 7 的分類表擇一)
 
 `event/nest-event-publisher.adapter.ts` 是共用基礎設施(見 `references/architecture.md`),僅專案第一次使用本 skill 時產生,本層不重複產出。
@@ -138,92 +138,6 @@ export class StripePaymentAdapter implements PaymentClient {
 
 `@Inject('STRIPE_API_KEY')` 這類純值 token 由 entity 的 Module 用 `{ provide: 'STRIPE_API_KEY', useValue: configService.get('STRIPE_API_KEY') }` 提供(見 `references/adapter_inbound_layer.md` 的 Module 模板),設定值來源用 `@nestjs/config` 的 `ConfigService`,不在 Adapter 內部直接讀 `process.env`。
 
-## 單元測試模板(規格含測試描述時產生)
+## 測試
 
-### Mapper 測試 `mapper/<entity>.mapper.spec.ts`
-
-純函式,不需要任何測試替身:
-
-```typescript
-import { describe, expect, it } from 'vitest';
-import { Booking } from '../../../../domain/booking/booking';
-import { BookingStatus } from '../../../../domain/booking/booking-status';
-import { BookingDataModel } from '../datamodel/booking.data-model';
-import { BookingMapper } from './booking.mapper';
-
-describe('BookingMapper', () => {
-  it('toDomain converts a data model', () => {
-    const dataModel = new BookingDataModel();
-    dataModel.id = 1;
-    dataModel.field = 'value';
-    dataModel.status = 'PENDING';
-
-    const domain = BookingMapper.toDomain(dataModel);
-
-    expect(domain?.id).toBe(1);
-    expect(domain?.status).toBe(BookingStatus.PENDING);
-  });
-
-  it('toDomain returns null for null input', () => {
-    expect(BookingMapper.toDomain(null)).toBeNull();
-  });
-
-  it('toDataModel converts a domain entity', () => {
-    const domain = new Booking(1, 'value', BookingStatus.PENDING);
-
-    const dataModel = BookingMapper.toDataModel(domain);
-
-    expect(dataModel?.field).toBe('value');
-    expect(dataModel?.status).toBe('PENDING');
-  });
-});
-```
-
-### Repository 測試 `<entity>.repository-impl.spec.ts`
-
-用記憶體 SQLite(`better-sqlite3`)起真實的 TypeORM `DataSource` 跑真實查詢,不 mock `Repository`:
-
-```typescript
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { DataSource } from 'typeorm';
-import { Booking } from '../../../domain/booking/booking';
-import { BookingStatus } from '../../../domain/booking/booking-status';
-import { BookingDataModel } from './datamodel/booking.data-model';
-import { BookingRepositoryImpl } from './booking.repository-impl';
-
-describe('BookingRepositoryImpl', () => {
-  let dataSource: DataSource;
-  let repository: BookingRepositoryImpl;
-
-  beforeEach(async () => {
-    dataSource = new DataSource({
-      type: 'better-sqlite3',
-      database: ':memory:',
-      entities: [BookingDataModel],
-      synchronize: true,
-    });
-    await dataSource.initialize();
-    repository = new BookingRepositoryImpl(dataSource.getRepository(BookingDataModel));
-  });
-
-  afterEach(async () => {
-    await dataSource.destroy();
-  });
-
-  it('saves and retrieves a booking', async () => {
-    const booking = new Booking(null, 'value', BookingStatus.PENDING);
-
-    const saved = await repository.save(booking);
-    const found = await repository.getById(saved.id!);
-
-    expect(found?.id).toBe(saved.id);
-    expect(found?.status).toBe(BookingStatus.PENDING);
-  });
-
-  it('returns null when not found', async () => {
-    const found = await repository.getById(999);
-
-    expect(found).toBeNull();
-  });
-});
-```
+本層不產生獨立測試檔案,詳見規則 9 與 `references/testing_principles.md`。

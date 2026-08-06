@@ -4,7 +4,7 @@
     {
       "id": 0,
       "prompt": "我在寫一個 Go 專案(module path: github.com/acme/orders),想要用 clean architecture 幫我刻一個 Order 實體。欄位有 id (int64)、customerId (int64)、totalAmount (float64)、status (PENDING/PAID/CANCELLED)。業務規則:Cancel() 只有 PENDING 狀態可以取消,取消後要發送一個 OrderCancelledEvent。需要串接一個外部 PaymentClient 去查金流狀態(用 client adapter 包起來就好,SDK 細節你自己編)。API 要有 POST /api/orders 建立訂單、PUT /api/orders/{id}/cancel 取消訂單、GET /api/orders/{id} 查詢。這是這個專案第一次刻這種分層,麻煩先幫我確認一下 TDD 流程,先寫測試再寫實作。",
-      "expected_output": "Full compilable Go clean-architecture layer set for Order (domain/usecase/adapter-outbound/adapter-inbound), plus the one-time shared kernel (domainerr, usecaseerr, Gin error middleware), plus domain and usecase tests written before implementation.",
+      "expected_output": "Full compilable Go clean-architecture layer set for Order (domain/usecase/adapter-outbound/adapter-inbound), plus the one-time shared kernel (domainerr, usecaseerr, Gin error middleware), plus a domain test written before implementation and a controller-level integration test (testcontainer-backed handler_test.go) written after all four layers exist — no usecase-layer mock test or adapter-outbound-layer test files.",
       "files": []
     },
     {

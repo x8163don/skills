@@ -259,11 +259,8 @@ src/
 | Controller | `@Controller('api/bookings') class BookingController` | `src/adapter/inbound/http/booking/booking.controller.ts` |
 | Response | `class BookingResponse` | `src/adapter/inbound/http/booking/booking.response.ts` |
 | Module(組裝 DI) | `@Module({...}) class BookingModule` | `src/adapter/inbound/http/booking/booking.module.ts` |
-| Domain 單元測試 | `describe('Booking...')` | `src/domain/booking/booking.spec.ts` |
-| UseCase 單元測試(一個 use case 一個) | `describe('ConfirmBookingUseCaseImpl...')` | `src/usecase/booking/confirm-booking.usecase.spec.ts` |
-| Mapper 單元測試 | `describe('BookingMapper...')` | `src/adapter/outbound/repository/mapper/booking.mapper.spec.ts` |
-| Repository 單元測試 | `describe('BookingRepositoryImpl...')` | `src/adapter/outbound/repository/booking.repository-impl.spec.ts` |
-| Controller e2e 測試 | `describe('BookingController (e2e)...')` | `src/adapter/inbound/http/booking/booking.controller.e2e-spec.ts` |
+| Domain aggregate test(Layer 1) | `describe('Booking...')` | `src/domain/booking/booking.spec.ts` |
+| Controller-level 整合測試(Layer 2,testcontainers) | `describe('BookingController (e2e)...')` | `src/adapter/inbound/http/booking/booking.controller.e2e-spec.ts` |
 
 檔名一律 kebab-case、副檔名依 NestJS/Nest CLI 慣例加後綴(`.controller.ts`、`.module.ts`、`.usecase.ts` 等);單元測試用 `.spec.ts`、e2e 測試用 `.e2e-spec.ts`,對應 Vitest 預設的 test glob。
 

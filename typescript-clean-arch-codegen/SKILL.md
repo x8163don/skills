@@ -1,6 +1,6 @@
 ---
 name: typescript-clean-arch-codegen
-description: Use when the user wants to implement a new feature or entity in a TypeScript/Node.js project using Clean Architecture / Hexagonal Architecture layers (Domain/Entities, Usecase, Adapter — split into Outbound and Inbound sides of Interface Adapters), generating idiomatic TypeScript code on a NestJS + TypeORM + Zod + Vitest stack (NestJS controllers wired through DI injection tokens, TypeORM repositories, Zod-validated commands, Vitest unit and e2e tests). Triggers on an entity spec with fields/business rules, "generate TypeScript layers for X", "implement X with clean architecture in Node/NestJS", "scaffold X entity in TypeScript", "write TDD implementation for X in TypeScript", or requirement + test descriptions in a Node/TypeScript project. Invoke even for partial specs — ask only for missing critical info (entity name or fields).
+description: Use when the user wants to implement a new feature or entity in a TypeScript/Node.js project using Clean Architecture / Hexagonal Architecture layers (Domain/Entities, Usecase, Adapter — split into Outbound and Inbound sides of Interface Adapters), generating idiomatic TypeScript code on a NestJS + TypeORM + Zod + Vitest stack (NestJS controllers wired through DI injection tokens, TypeORM repositories, Zod-validated commands, Vitest domain unit tests and testcontainers-backed controller-level integration tests). Triggers on an entity spec with fields/business rules, "generate TypeScript layers for X", "implement X with clean architecture in Node/NestJS", "scaffold X entity in TypeScript", "write TDD implementation for X in TypeScript", or requirement + test descriptions in a Node/TypeScript project. Invoke even for partial specs — ask only for missing critical info (entity name or fields).
 ---
 
 # TypeScript Clean Architecture Code Generator
@@ -27,7 +27,7 @@ description: Use when the user wants to implement a new feature or entity in a T
 6. **共用基礎設施只生成一次**:`domain/errors.ts`、`usecase/errors.ts`、`usecase/event-publisher.port.ts`、`adapter/outbound/event/nest-event-publisher.adapter.ts`、`adapter/inbound/http/pipes/zod-validation.pipe.ts`、`adapter/inbound/http/filters/global-exception.filter.ts` 是專案級檔案,不是 per-entity 檔案——第一次在這個專案使用本 skill 時產生,之後每個新 entity 直接重用,不要重複產出(見 `references/architecture.md`)。
 7. **命名一律依推導表**:所有型別名稱與檔案路徑依 `references/architecture.md` 的命名推導表從 Entity 名稱產生,不自創命名。
 8. **每個檔案完整可編譯**:含完整 import、完整方法實作,零 TODO、零丟出 `Error('not implemented')` 這類佔位程式碼。
-9. **產生順序固定**:(共用基礎設施,如未生成 →)(測試 →)Domain → Usecase → Adapter/Outbound → Adapter/Inbound;有測試描述時,測試先於實作產生。
+9. **產生順序固定**:(共用基礎設施,如未生成 →)(Domain test →)Domain → Usecase → Adapter/Outbound → Adapter/Inbound(→ Controller-level 整合測試)。只有兩個測試層級,詳見 `references/testing_principles.md`:Domain aggregate test 在 Domain 實作前先產(TDD);Controller-level 整合測試要等四層都產完才能產,因為它需要真的組出一個可以跑的 `<Entity>Module` 對它發 HTTP request。usecase 層與 adapter-outbound 層不再各自產生獨立測試。
 
 ## 固定輸出格式
 
@@ -46,7 +46,7 @@ description: Use when the user wants to implement a new feature or entity in a T
 
 1. **解析與確認**:從輸入提取 Entity 名稱(PascalCase)、Fields(TypeScript 型別)、Business Rules(→ 方法簽名)、Outbound Dependencies、API Endpoints、Tests。輸入為段落描述時,自行整理成規格並請用戶確認;僅在 Entity 名稱或 Fields 完全缺失時才暫停詢問。輸入格式見 `references/architecture.md`。
 2. **確認共用基礎設施**:詢問或依上下文判斷這是否是專案第一次使用本 skill;若是,先產生 `src/domain/errors.ts`、`src/usecase/errors.ts`、`src/usecase/event-publisher.port.ts`、`src/adapter/outbound/event/nest-event-publisher.adapter.ts`、`src/adapter/inbound/http/pipes/zod-validation.pipe.ts`、`src/adapter/inbound/http/filters/global-exception.filter.ts`(模板見 `references/architecture.md`),並提醒使用者在 `main.ts`/`AppModule` 掛上 `app.useGlobalFilters(...)`、`EventEmitterModule.forRoot()`。若專案已有這些檔案,跳過此步驟。
-3. **(TDD)先產測試**:規格含測試描述時,產生 `<entity>.spec.ts`(Vitest、無 mock、每條業務規則一個正常案例 + 至少一個邊界案例)與每個 use case 情境各自的 `<action>-<entity>.usecase.spec.ts`(Vitest + `vi.fn()`,只手寫該 use case 用到的 Outbound Port 的假物件)。
+3. **(TDD)先產 Domain test**:規格含測試描述時,產生 `<entity>.spec.ts`(Vitest、無 mock、每條業務規則一個正常案例 + 至少一個邊界案例)。這是兩個測試層級中唯一在實作之前產生的一層,詳見 `references/testing_principles.md`。
 4. **依序產生四層**:每層產生前先讀取對應 reference 的模板:
 
    | 層 | Reference | 產出檔案 |
@@ -57,7 +57,8 @@ description: Use when the user wants to implement a new feature or entity in a T
    | Adapter/Outbound | `references/adapter_outbound_layer.md` | TypeORM DataModel、Mapper、RepositoryImpl、(Client/Messaging/Cache/Notification/Storage Adapter) |
    | Adapter/Inbound | `references/adapter_inbound_layer.md` | Response、Controller、Module(Command 已在 Usecase 產出,此處直接 import) |
 
-5. **逐層檢查**:每層完成後對照該 reference 的「規則」小節與本文件「產出前檢查」。
+5. **產生 Controller-level 整合測試**:規格含測試描述時,四層都產生完後,產生 `<entity>.controller.e2e-spec.ts`(用 testcontainers 起真實 DB,見 `references/adapter_inbound_layer.md`)。這是唯一的第二層測試,涵蓋 usecase 串接與 repository 正確性,不再另外產生 usecase mock test 或 adapter-outbound test。
+6. **逐層檢查**:每層完成後對照該 reference 的「規則」小節與本文件「產出前檢查」。
 
 ## 簡單範例
 
@@ -149,3 +150,5 @@ export class Booking {
 - [ ] 每個 entity 有對應的 `<Entity>Module` 把 Port token 繫結到 Impl class
 - [ ] 所有型別名稱符合命名推導表
 - [ ] 每個檔案有輸出標頭、完整 import、零 TODO
+- [ ] 只有兩個測試層級:Domain test(無 mock)+ Controller-level 整合測試(testcontainers 起真實 DB);沒有另外產生 usecase mock test 或 adapter-outbound 獨立 test
+- [ ] Controller-level 整合測試的寫入類斷言不是只看 HTTP 回應,而是再查一次資料確認真的落地
